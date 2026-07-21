@@ -685,7 +685,13 @@ def build_minimax_m3_forward_metadata(
     validate_minimax_m3_page_size(page_size)
     batch_size = _get_batch_size(forward_batch)
     seq_lens = _get_seq_lens(forward_batch, batch_size)
-    max_seq_len = _get_max_seq_len(forward_batch, batch_size, seq_lens)
+    if _is_stream_capturing() and forward_batch.forward_mode.is_decode_or_idle():
+        # CUDA Graph capture uses a fixed-width block table. Derive the paired
+        # capacity scalar from that static shape, not from capture-time
+        # seq_lens, which SGLang fills with 1 (or the speculative draft width).
+        max_seq_len = int(block_table.shape[1]) * page_size
+    else:
+        max_seq_len = _get_max_seq_len(forward_batch, batch_size, seq_lens)
 
     if forward_batch.forward_mode.is_decode_or_idle():
         return MiniMaxM3SGLangMetadata(
